@@ -1,0 +1,29 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+model Schedule {
+  id    Int @id @unique
+  timing String
+  Users User[]
+}
+model User {
+  id              Int       @id @default(autoincrement())
+  email           String    @unique
+  first_name      String
+  last_name       String
+  phone           BigInt    @unique
+  schedule        Schedule   @relation(fields: [scheduleId], references:[id])
+  scheduleId      Int
+  sessionPackage  Int
+  gender          String
+  fee_current     Boolean
+  fee_next_month  Boolean
+}
