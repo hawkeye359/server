@@ -25,63 +25,157 @@ async function check_for_existing_user(email, phone) {
   }
   return false;
 }
-// main()
-//   .then(async () => {
-//     await prisma.$disconnect();
-//   })
-//   .catch(async (e) => {
-//     console.error(e);
-//     await prisma.$disconnect();
-//     process.exit(1);
-//   });
+async function check_with_id(id) {
+  let existing = await prisma.user.findUnique({
+    where: {
+      id: parseInt(id),
+    },
+  });
+  return existing;
+}
 app.use(bodyParser.json());
-app.use(morgan("dev"));
+app.use(morgan("combined"));
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    // origin: "http://localhost:3000",
+    origin: "*",
   })
 );
 
 app.get("/", (req, res) => {
   res.send("ok 200");
 });
-
-app.post("/register", async (req, res) => {
-  const data = req.body;
-  console.log(req.body);
-  const existing = await check_for_existing_user(
-    req.body.email,
-    req.body.phone
-  );
-  if (existing) {
-    let response = await JSON.stringify({ res: 0 });
-    res.send(response);
-  } else {
+function paymentHandler(name, card) {
+  return true;
+}
+app.post("/payment", async (req, res) => {
+  try {
+    const data = req.body;
+    let existing;
     try {
-      const user = await prisma.user.create({
-        data: {
-          email: data.email,
-          phone: BigInt(data.phone),
-          first_name: data.firstName,
-          last_name: data.lastName,
-          scheduleId: parseInt(data.session),
-          sessionPackage: parseInt(data.sessionPackage),
-          gender: data.gender,
-          fee_current: false,
-          fee_next_month: false,
-        },
-      });
-      console.log(something);
-      res.status(200);
-      const response = await JSON.stringify({ res: "ok", id: user.id });
-      res.send(response);
+      existing = await check_with_id(data.id);
     } catch (e) {
-      console.log(e);
-      let response = await JSON.stringify({ res: 1 });
+      const response = await JSON.stringify({ code: 1, res: "server error" });
+      res.send(response);
     }
+    if (!existing) {
+      const response = JSON.stringify({
+        code: 1,
+        res: "user does not exist. Please provide correct id",
+      });
+      res.send(response);
+    } else {
+      try {
+        if (paymentHandler(data.name, data.card)) {
+          await prisma.user.update({
+            where: {
+              id: parseInt(data.id),
+            },
+            data: {
+              fee_current: data.fee_current,
+              fee_next_month: data.fee_next_month,
+            },
+          });
+          const response = JSON.stringify({
+            code: 0,
+            res: "fee successfully submitted",
+          });
+          res.send(response);
+        }
+      } catch (e) {
+        console.log(e);
+        const response = JSON.stringify({
+          code: 0,
+          res: "Server Error! Please try again with correct data or try again later",
+        });
+        res.send(response);
+      }
+    }
+  } catch (e) {
+    const response = JSON.stringify({
+      code: 1,
+      res: "server error",
+    });
+    res.send(response);
   }
 });
-
+app.get("/feeDetails", async (req, res) => {
+  try {
+    const data = req.query;
+    console.log(req.query);
+    try {
+      const existing = await check_with_id(data.id);
+      if (!existing) {
+        const response = JSON.stringify({ code: 1, res: "id not found" });
+        res.send(response);
+      } else {
+        const resp = {
+          fee_current: existing.fee_current,
+          fee_next_month: existing.fee_next_month,
+        };
+        console.log(resp);
+        const response = await JSON.stringify(resp);
+        res.status(200);
+        res.send(response);
+      }
+    } catch (e) {
+      const response = await JSON.stringify({ code: 1, res: "id not found" });
+      res.send(response);
+    }
+  } catch (e) {
+    const response = await JSON.stringify({
+      code: 1,
+      res: "server error",
+    });
+    res.send(response);
+  }
+});
+app.post("/register", async (req, res) => {
+  try {
+    const data = req.body;
+    console.log(req.body);
+    const existing = await check_for_existing_user(
+      req.body.email,
+      req.body.phone
+    );
+    if (existing) {
+      let response = await JSON.stringify({ res: 0 });
+      res.send(response);
+    } else {
+      try {
+        const user = await prisma.user.create({
+          data: {
+            email: data.email,
+            phone: BigInt(data.phone),
+            first_name: data.firstName,
+            last_name: data.lastName,
+            scheduleId: parseInt(data.session),
+            sessionPackage: parseInt(data.sessionPackage),
+            gender: data.gender,
+            fee_current: false,
+            fee_next_month: false,
+          },
+        });
+        res.status(200);
+        const response = await JSON.stringify({ res: "ok", id: user.id });
+        res.send(response);
+      } catch (e) {
+        console.log(e);
+        let response = await JSON.stringify({ res: 1 });
+        res.send(response);
+      }
+    }
+  } catch (e) {
+    const response = await JSON.stringify({
+      res: 1,
+    });
+    res.send(response);
+  }
+});
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).send("Something broke!");
+});
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`started the app at port ${PORT}`);
